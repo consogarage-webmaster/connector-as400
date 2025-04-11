@@ -1,0 +1,20 @@
+{
+  "name": "connector-as400",
+  "version": "1.0.0",
+  "description": "Une application permettant le dialogue entre Prestashop et AS400",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.8.4",
+    "chokidar": "^4.0.3",
+    "dotenv": "^16.5.0",
+    "xml2js": "^0.6.2"
+  }
+}
