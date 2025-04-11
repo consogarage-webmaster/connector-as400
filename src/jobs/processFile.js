@@ -13,7 +13,6 @@ async function moveFile(originalPath, targetFolder) {
 export async function processFile(filePath) {
   try {
     const data = await parseFile(filePath);
-
     for (const { sku, quantity } of data) {
       await updateStock(sku, quantity);
     }
