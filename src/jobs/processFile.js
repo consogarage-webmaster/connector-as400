@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import { parseFile } from '../parser/fileParser.js';
 import { updateStock } from '../prestashop/apiClient.js';
 import { config } from '../config.js';
+import { logger } from './logActions.js';
 
 async function moveFile(originalPath, targetFolder) {
   const fileName = path.basename(originalPath);
@@ -19,8 +20,10 @@ export async function processFile(filePath) {
 
     await moveFile(filePath, config.processedFolder);
     console.log(`Processed and moved ${filePath}`);
+    await logger.shipmentProcessed('my message');
   } catch (err) {
     console.error(`Failed to process ${filePath}:`, err);
     await moveFile(filePath, config.failedFolder);
+    await logger.errorLog(`File ${filePath} : Error on stock update : ${err}`)
   }
 }
