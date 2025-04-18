@@ -18,7 +18,7 @@ export async function updateStock(sku, quantity) {
     if (!id) throw new Error(`No product found for SKU ${sku}`);
     console.log(`Would update stock for SKU ${sku} to ${quantity}`);
 
-    // To be implemented: fetch full XML, update it, PUT it back
+    // TODO call webservice
   } catch (err) {
     console.error(`Error updating stock for SKU ${sku}:`, err.message);
     throw err;
