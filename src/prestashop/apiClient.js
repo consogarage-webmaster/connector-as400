@@ -11,24 +11,51 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/xml' }
 });
 
+// import { parseStringPromise, Builder as XMLBuilder } from 'xml2js';
+
 export async function updateStock(products) {
   for (const product of products) {
     const { product_reference, physicalQuantity, reservedQuantity, availableQuantity } = product;
+
     try {
+      // 1. Get product ID by reference
       const response = await api.get(`/products?display=full&filter[reference]=[${product_reference}]&output_format=JSON`);
-      const id = response.data.products?.[0]?.id;
+      const productData = response.data.products?.[0];
+      const productId = productData?.id;
+      if (!productId) throw new Error(`No product found for reference ${product_reference}`);
 
-      if (!id) throw new Error(`No product found for reference ${product_reference}`);
-      console.log(`Would update stock for reference ${product_reference} (ID: ${id} - to physical : ${physicalQuantity}, reserved : ${reservedQuantity}, available : ${availableQuantity}`);
+      // 2. Get stock_available ID
+      const stockRes = await api.get(`/stock_availables?filter[id_product]=[${productId}]&output_format=JSON`);
+      const stockId = stockRes.data.stock_availables?.[0]?.id;
+      if (!stockId) throw new Error(`No stock_available found for product ID ${productId}`);
 
-      // TODO call webservice to update stock available
+      // 3. Get stock_available XML
+      const stockXmlRes = await api.get(`/stock_availables/${stockId}`);
+      const parsedStock = await parseStringPromise(stockXmlRes.data);
+      const stockXml = parsedStock?.prestashop?.stock_available?.[0];
+      if (!stockXml) throw new Error(`Malformed stock_available XML for ID ${stockId}`);
+
+      // 4. Set new quantities
+      stockXml.quantity = [availableQuantity.toString()];
+      stockXml.physical_quantity = [physicalQuantity.toString()];
+      stockXml.reserved_quantity = [reservedQuantity.toString()];
+
+      // 5. Build and PUT updated stock_available XML
+      const stockBuilder = new XMLBuilder({ headless: false, rootName: 'prestashop' });
+      const updatedStockXml = stockBuilder.buildObject({
+        $: { 'xmlns:xlink': 'http://www.w3.org/1999/xlink' },
+        stock_available: stockXml
+      });
+
+      await api.put(`/stock_availables/${stockId}`, updatedStockXml);
+      console.log(`✅ Stock_available updated for ${product_reference}`);
+
     } catch (err) {
-      console.error(`Error updating stock for SKU ${product_reference}:`, err.message);
-      throw err;
+      console.error(`❌ Error updating stock for ${product_reference}:`, err.response?.data || err.message);
     }
   }
-
 }
+
 
 export async function createShipment(data) {
   const { orderReference, carrierName, products } = data;
