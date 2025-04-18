@@ -11,19 +11,23 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/xml' }
 });
 
-export async function updateStock(sku, quantity) {
-  try {
-    const response = await api.get(`/products?filter[reference]=[${sku}]`);
-    const id = response.data.products?.product?.[0]?.id;
+export async function updateStock(products) {
+  for (const product of products) {
+    const { product_reference, physicalQuantity, reservedQuantity, availableQuantity } = product;
+    try {
+      const response = await api.get(`/products?display=full&filter[reference]=[${product_reference}]&output_format=JSON`);
+      const id = response.data.products?.[0]?.id;
 
-    if (!id) throw new Error(`No product found for SKU ${sku}`);
-    console.log(`Would update stock for SKU ${sku} to ${quantity}`);
+      if (!id) throw new Error(`No product found for reference ${product_reference}`);
+      console.log(`Would update stock for reference ${product_reference} (ID: ${id} - to physical : ${physicalQuantity}, reserved : ${reservedQuantity}, available : ${availableQuantity}`);
 
-    // TODO call webservice
-  } catch (err) {
-    console.error(`Error updating stock for SKU ${sku}:`, err.message);
-    throw err;
+      // TODO call webservice to update stock available
+    } catch (err) {
+      console.error(`Error updating stock for SKU ${product_reference}:`, err.message);
+      throw err;
+    }
   }
+
 }
 
 export async function createShipment(data) {

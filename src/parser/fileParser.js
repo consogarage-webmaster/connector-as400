@@ -3,11 +3,13 @@ import path from 'path';
 
 export async function parseFile(filePath) {
   const content = await fs.readFile(filePath, 'utf8');
-    console.log(`content : ${content}`);
-    const fileName = path.basename(filePath);
-    if (fileName.startsWith('shipment_')) {
-      return parseShipment(content);
-    }
+  console.log(`content : ${content}`);
+  const fileName = path.basename(filePath);
+  if (fileName.startsWith('shipment_')) {
+    return parseShipment(content);
+  } else if (fileName.startsWith('stock')) {
+    return parseStock(content);
+  }
   // return content
   //   .split('\n')
   //   .filter(line => line.trim())
@@ -42,5 +44,20 @@ function parseShipment(content) {
     }
   }
 
-  return {action : 'recordShipment', orderReference, carrierName, products };
+  return { action: 'recordShipment', orderReference, carrierName, products };
+}
+
+function parseStock(content) {
+  const lines = content.split('\n').map(line => line.trim()).filter(Boolean);
+  const products = [];
+
+  for (const line of lines) {
+    const parts = line.split(';');
+    const product_reference = parts[0];
+    const physicalQuantity = parseInt(parts[1], 10);
+    const reservedQuantity = parseInt(parts[2], 10);
+    const availableQuantity = parseInt(parts[3], 10);
+    products.push({ product_reference, physicalQuantity, reservedQuantity, availableQuantity });
+  }
+  return products;
 }
