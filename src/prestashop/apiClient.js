@@ -48,7 +48,7 @@ export async function updateStock(products) {
       });
 
       await api.put(`/stock_availables/${stockId}`, updatedStockXml);
-      console.log(`✅ Stock_available updated for ${product_reference}`);
+      console.log(`✅ Stock_available updated for ${product_reference} : Phys: ${physicalQuantity}, Reserved: ${reservedQuantity}, Available: ${availableQuantity}`);
 
     } catch (err) {
       console.error(`❌ Error updating stock for ${product_reference}:`, err.response?.data || err.message);

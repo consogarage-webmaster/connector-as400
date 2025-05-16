@@ -74,11 +74,7 @@ T;Affrètement@2ml
 L;1024-629;1
 L;1024-630;1
 ```
-### Demande de création d'article (email : Prestashop => AS400) 
-Voir fichier articles Stéphane
-### Retour articles : process Ital indépendant
-```
-Reference
-Qté physique
-Qté réservée
-```
+# Mise à jour du stock
+CBR1232;10;1;9
+OM8153BL;11;1;10
+OM9879BL;12;1;11
