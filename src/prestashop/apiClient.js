@@ -15,7 +15,7 @@ const api = axios.create({
 
 export async function updateStock(products) {
   for (const product of products) {
-    const { product_reference, physicalQuantity, reservedQuantity, availableQuantity } = product;
+    const { product_reference, physicalQuantity, reservedQuantity, availableQuantity, product_attribute_reference } = product;
 
     try {
       // 1. Get product ID by reference
@@ -24,10 +24,23 @@ export async function updateStock(products) {
       const productId = productData?.id;
       if (!productId) throw new Error(`No product found for reference ${product_reference}`);
 
+      // 1b. Get id_product_attribute si déclinaison
+      let id_product_attribute = 0;
+      if (product_attribute_reference) {
+        const combRes = await api.get(`/product_option_values?filter[reference]=[${product_attribute_reference}]&output_format=JSON`);
+        const combId = combRes.data.product_option_values?.[0]?.id;
+        if (!combId) throw new Error(`No product_attribute found for reference ${product_attribute_reference}`);
+        id_product_attribute = combId;
+      }
+
       // 2. Get stock_available ID
-      const stockRes = await api.get(`/stock_availables?filter[id_product]=[${productId}]&output_format=JSON`);
-      const stockId = stockRes.data.stock_availables?.[0]?.id;
-      if (!stockId) throw new Error(`No stock_available found for product ID ${productId}`);
+      let stockFilter = `/stock_availables?filter[id_product]=[${productId}]`;
+      if (id_product_attribute) stockFilter += `&filter[id_product_attribute]=[${id_product_attribute}]`;
+      stockFilter += '&output_format=JSON';
+      const stockRes = await api.get(stockFilter);
+      const stockAvailable = stockRes.data.stock_availables?.[0];
+      const stockId = stockAvailable?.id;
+      if (!stockId) throw new Error(`No stock_available found for product ID ${productId} (attribute: ${id_product_attribute})`);
 
       // 3. Get stock_available XML
       const stockXmlRes = await api.get(`/stock_availables/${stockId}`);
@@ -35,12 +48,34 @@ export async function updateStock(products) {
       const stockXml = parsedStock?.prestashop?.stock_available?.[0];
       if (!stockXml) throw new Error(`Malformed stock_available XML for ID ${stockId}`);
 
-      // 4. Set new quantities
+      // 4. Get advanced stock (physical_quantity) for this product/warehouse/attribute
+      const warehouseId = stockAvailable.id_warehouse || 1;
+      let stocksUrl = `/stocks?filter[id_product]=[${productId}]&filter[id_warehouse]=[${warehouseId}]`;
+      if (id_product_attribute) stocksUrl += `&filter[id_product_attribute]=[${id_product_attribute}]`;
+      stocksUrl += '&output_format=JSON';
+      const stocksRes = await api.get(stocksUrl);
+      const stockRow = stocksRes.data.stocks?.[0];
+      const currentPhysical = stockRow ? parseInt(stockRow.physical_quantity, 10) : 0;
+
+      // 5. Calcul du delta physique et création du mouvement si besoin
+      const deltaPhysical = physicalQuantity - currentPhysical;
+      if (deltaPhysical !== 0) {
+        await createStockMovement({
+          id_product: productId,
+          id_product_attribute,
+          id_warehouse: warehouseId,
+          quantity: Math.abs(deltaPhysical),
+          sign: deltaPhysical > 0 ? 1 : -1,
+          reason: 1 // 1 = manuelle
+        });
+        console.log(`🟢 Mouvement de stock créé pour ${product_reference} (attr: ${product_attribute_reference || 'aucun'}) : ${deltaPhysical > 0 ? '+' : ''}${deltaPhysical}`);
+      }
+
+      // 6. Met à jour la quantité disponible (stock_available)
       stockXml.quantity = [availableQuantity.toString()];
       stockXml.physical_quantity = [physicalQuantity.toString()];
       stockXml.reserved_quantity = [reservedQuantity.toString()];
 
-      // 5. Build and PUT updated stock_available XML
       const stockBuilder = new XMLBuilder({ headless: false, rootName: 'prestashop' });
       const updatedStockXml = stockBuilder.buildObject({
         $: { 'xmlns:xlink': 'http://www.w3.org/1999/xlink' },
@@ -48,14 +83,33 @@ export async function updateStock(products) {
       });
 
       await api.put(`/stock_availables/${stockId}`, updatedStockXml);
-      console.log(`✅ Stock_available updated for ${product_reference} : Phys: ${physicalQuantity}, Reserved: ${reservedQuantity}, Available: ${availableQuantity}`);
+      console.log(`✅ Stock_available updated for ${product_reference} (attr: ${product_attribute_reference || 'aucun'}) /n Id stock : ${stockId} Phys: ${physicalQuantity}, Reserved: ${reservedQuantity}, Available: ${availableQuantity}`);
 
     } catch (err) {
       console.error(`❌ Error updating stock for ${product_reference}:`, err.response?.data || err.message);
     }
   }
 }
-
+async function createStockMovement({ id_product, id_product_attribute = 0, id_warehouse, quantity, sign = 1, reason = 1, id_employee = 1 }) {
+  const builder = new XMLBuilder({ rootName: 'prestashop', headless: true });
+  const xml = builder.buildObject({
+    stock_mvt: {
+      id_stock: '',
+      id_product,
+      id_product_attribute,
+      id_warehouse,
+      id_currency: 1,
+      management_type: 'WA',
+      price_te: 0,
+      sign,
+      quantity,
+      date_add: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      id_stock_mvt_reason: reason,
+      id_employee
+    }
+  });
+  await api.post('/stock_movements', xml);
+}
 
 export async function createShipment(data) {
   const { orderReference, carrierName, products } = data;
